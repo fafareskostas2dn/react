@@ -788,6 +788,51 @@ jobs:
           path: tmp/playwright-artifacts
           if-no-files-found: warn
 
+  run_react_devtools_cdt_mcp_e2e_tests:
+    name: Run React DevTools CDT MCP e2e tests
+    needs: [build_and_lint, runtime_node_modules_cache]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Restore cached node_modules
+        uses: actions/cache/restore@v4
+        id: node_modules
+        with:
+          path: |
+            **/node_modules
+          key: runtime-node_modules-v10-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          # Don't use restore-keys here. Otherwise the cache grows indefinitely.
+      - name: Ensure clean build directory
+        run: rm -rf build
+      - run: yarn install --frozen-lockfile
+        if: steps.node_modules.outputs.cache-hit != 'true'
+      - name: Restore archived build
+        uses: actions/download-artifact@v4
+        with:
+          pattern: _build_*
+          path: build
+          merge-multiple: true
+      - name: Display structure of build
+        run: ls -R build
+      - name: Check Chrome version
+        run: /usr/bin/google-chrome --version
+      - name: Run React DevTools CDT MCP e2e tests
+        run: yarn --cwd packages/react-devtools-cdt-mcp test:e2e:ci
+        env:
+          CHROME_EXECUTABLE_PATH: /usr/bin/google-chrome
+      - name: Archive React DevTools CDT MCP e2e logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-devtools-cdt-mcp-e2e-logs
+          path: tmp/react-devtools-cdt-mcp-e2e
+          if-no-files-found: warn
+
   # ----- SIZEBOT -----
   sizebot:
     if: ${{ github.event_name == 'pull_request' && github.ref_name != 'main' && github.event.pull_request.base.ref == 'main' }}
