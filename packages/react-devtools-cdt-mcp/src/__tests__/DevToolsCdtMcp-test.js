@@ -14,6 +14,7 @@ const TOOL_NAMES = [
   'react_find_components',
   'react_get_component_source',
   'react_get_owners_stack',
+  'react_get_parents_branch',
   'react_get_owners_branch',
   'react_start_profiling',
   'react_stop_profiling',
@@ -105,6 +106,12 @@ describe('react-devtools-cdt-mcp', () => {
       expect(tool.inputSchema.type).toBe('object');
       expect(typeof tool.execute).toBe('function');
     });
+    expect(getTool('react_get_parents_branch').description).toEqual(
+      expect.stringContaining('Rendered parent chain'),
+    );
+    expect(getTool('react_get_owners_branch').description).toEqual(
+      expect.stringContaining('Owners describe'),
+    );
   });
 
   it('declares JSON-Schema input with required params', () => {
@@ -141,6 +148,16 @@ describe('react-devtools-cdt-mcp', () => {
       },
       required: ['name'],
     });
+    expect(getTool('react_get_parents_branch').inputSchema).toEqual({
+      type: 'object',
+      properties: {uid: {type: 'string', description: expect.any(String)}},
+      required: ['uid'],
+    });
+    expect(getTool('react_get_owners_branch').inputSchema).toEqual({
+      type: 'object',
+      properties: {uid: {type: 'string', description: expect.any(String)}},
+      required: ['uid'],
+    });
     expect(getTool('react_start_profiling').inputSchema).toEqual({
       type: 'object',
       properties: {
@@ -171,8 +188,8 @@ describe('react-devtools-cdt-mcp', () => {
     });
 
     const result = getTool('react_get_component_tree').execute({});
-    // Uids are assigned deterministically as fibers are first encountered. A
-    // fiber's first child is assigned before the fiber itself, so App (the host
+    // Uids are assigned deterministically as nodes are first encountered. A
+    // node's first child is assigned before the node itself, so App (the host
     // root's first child) is r0, the host root is r1, and the div is r2.
     expect(result).toEqual([
       {
@@ -303,6 +320,34 @@ describe('react-devtools-cdt-mcp', () => {
     });
   });
 
+  it('react_get_parents_branch returns structural ancestors', () => {
+    function Child() {
+      return <span>leaf</span>;
+    }
+    function Owner() {
+      return (
+        <section>
+          <Child />
+        </section>
+      );
+    }
+
+    act(() => {
+      ReactDOMClient.createRoot(container).render(<Owner />);
+    });
+
+    const tree = getTool('react_get_component_tree').execute({});
+    const child = tree.find(n => n.name === 'Child');
+
+    expect(
+      getTool('react_get_parents_branch').execute({uid: child.uid}),
+    ).toEqual([
+      {uid: 'r2', name: 'section', type: 'host'},
+      {uid: 'r0', name: 'Owner', type: 'function'},
+      {uid: 'r1', name: expect.any(String), type: 'root'},
+    ]);
+  });
+
   it('react_get_component_by_dom_element returns the DOM element component', () => {
     function Wrapper({children}) {
       return <section className="wrap">{children}</section>;
@@ -393,7 +438,7 @@ describe('react-devtools-cdt-mcp', () => {
     expect(overview).toHaveLength(1);
     expect(overview[0].commit).toBe(0);
 
-    // The commit report lists the fibers that rendered, sorted by actualDuration
+    // The commit report lists the components that rendered, sorted by actualDuration
     // descending, with uids assigned in commit-walk order: the host root r0
     // (widest duration), then Counter r1, then the div r2. Durations are
     // timing-dependent, so assert identity (uid/name/type) only.

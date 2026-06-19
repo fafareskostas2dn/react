@@ -71,8 +71,8 @@ const TOOL_DEFINITIONS: Array<ToolDefinition> = [
       'Detailed info for one component by uid: ' +
       '{uid, type, name, key?, props?, hooks?}. props excludes children and ' +
       'is normalized for serialization; hooks is the nested hooks tree ' +
-      '({id, name, value, subHooks}), present only for function/forwardRef/' +
-      'memo components.',
+      '({id, name, value, subHooks}), present only for function/forwardRef/memo ' +
+      'components.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -159,11 +159,30 @@ const TOOL_DEFINITIONS: Array<ToolDefinition> = [
     call: (tools, args) => tools.getOwnersStack(args.uid),
   },
   {
+    name: 'react_get_parents_branch',
+    description:
+      'Rendered parent chain for a component, from immediate parent to root: ' +
+      'an array of {uid, name, type}. Parents describe where the node is ' +
+      'mounted in the rendered component tree and may include host DOM ' +
+      'components and the root. This differs from owners, which describe JSX ' +
+      'creation/render ownership.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        uid: {type: 'string', description: 'Component uid, e.g. "r5".'},
+      },
+      required: ['uid'],
+    },
+    call: (tools, args) => tools.getParentsBranch(args.uid),
+  },
+  {
     name: 'react_get_owners_branch',
     description:
-      'Structured owner chain for a component, from immediate owner to root ' +
-      'ancestor: an array of {uid, name, type} (empty for a root ' +
-      'component). DEV-only.',
+      'JSX owner chain for a component, from immediate owner to root owner: ' +
+      'an array of {uid, name, type} (empty for a root component). Owners ' +
+      'describe which components created/rendered this element through JSX, ' +
+      'not where it is mounted in the rendered component tree. This DEV-only metadata ' +
+      'differs from structural parents.',
     inputSchema: {
       type: 'object',
       properties: {

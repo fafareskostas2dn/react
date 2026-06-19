@@ -1034,6 +1034,106 @@ describe('react-devtools-facade', () => {
     });
   });
 
+  describe('getParentsBranch', () => {
+    let getParentsBranch;
+    let getOwnersBranch;
+    let getComponentTree;
+
+    beforeEach(() => {
+      const tools = createTools(facade);
+      getParentsBranch = tools.getParentsBranch;
+      getOwnersBranch = tools.getOwnersBranch;
+      getComponentTree = tools.getComponentTree;
+    });
+
+    it('returns structural parents from immediate parent to host root', () => {
+      function Child() {
+        return <span>leaf</span>;
+      }
+      function App() {
+        return (
+          <section>
+            <Child />
+          </section>
+        );
+      }
+
+      act(() => {
+        ReactDOMClient.createRoot(container).render(<App />);
+      });
+
+      const child = getComponentTree().find(n => n.name === 'Child');
+      expect(child).toBeDefined();
+
+      const parents = getParentsBranch(child.uid);
+      expect(parents).toEqual([
+        {
+          uid: 'r2',
+          name: 'section',
+          type: 'host',
+        },
+        {
+          uid: 'r0',
+          name: 'App',
+          type: 'function',
+        },
+        {
+          uid: 'r1',
+          name: expect.any(String),
+          type: 'root',
+        },
+      ]);
+    });
+
+    it('distinguishes structural parents from JSX owners', () => {
+      function Child() {
+        return <span>leaf</span>;
+      }
+      function App() {
+        return (
+          <section>
+            <Child />
+          </section>
+        );
+      }
+
+      act(() => {
+        ReactDOMClient.createRoot(container).render(<App />);
+      });
+
+      const child = getComponentTree().find(n => n.name === 'Child');
+      const parents = getParentsBranch(child.uid);
+      const owners = getOwnersBranch(child.uid);
+
+      expect(parents[0]).toMatchObject({
+        name: 'section',
+        type: 'host',
+      });
+      expect(owners[0]).toMatchObject({
+        name: 'App',
+        type: 'function',
+      });
+    });
+
+    it('returns an empty array for the host root', () => {
+      function App() {
+        return <div>hello</div>;
+      }
+
+      act(() => {
+        ReactDOMClient.createRoot(container).render(<App />);
+      });
+
+      const root = getComponentTree().find(n => n.type === 'root');
+      expect(getParentsBranch(root.uid)).toEqual([]);
+    });
+
+    it('returns error for non-existent uid', () => {
+      const result = getParentsBranch('r9999');
+      expect(result.error).toMatch(/Component not found/);
+    });
+  });
+
   describe('getOwnersBranch', () => {
     let getOwnersBranch;
     let getComponentTree;

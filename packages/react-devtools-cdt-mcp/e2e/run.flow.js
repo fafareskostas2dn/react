@@ -109,8 +109,10 @@ type OwnersStackResult = {
   stack: string,
   ...
 };
-type Owner = {
+type ComponentBranchEntry = {
+  uid: string,
   name: string,
+  type: string,
   ...
 };
 type ErrorPayload = {
@@ -145,6 +147,7 @@ const TOOL_NAMES = [
   'react_find_components',
   'react_get_component_source',
   'react_get_owners_stack',
+  'react_get_parents_branch',
   'react_get_owners_branch',
   'react_start_profiling',
   'react_stop_profiling',
@@ -569,10 +572,21 @@ function parseNamedObject(value: mixed, message: string): {name: string, ...} {
   };
 }
 
+function parseComponentBranchEntry(
+  value: mixed,
+  message: string
+): ComponentBranchEntry {
+  const object = expectObject(value, message);
+  return {
+    uid: expectString(object.uid, `${message} uid`),
+    name: expectString(object.name, `${message} name`),
+    type: expectString(object.type, `${message} type`),
+  };
+}
+
 function parseComponentDetails(value: mixed): ComponentDetails {
   const object = expectObject(value, 'Expected component details object');
-  return {
-    ...object,
+  const details: ComponentDetails = {
     name: expectString(object.name, 'Expected component details name'),
     type: expectString(object.type, 'Expected component details type'),
     hooks: expectArray(object.hooks, 'Expected component details hooks').map(
@@ -580,6 +594,7 @@ function parseComponentDetails(value: mixed): ComponentDetails {
         parseNamedObject(hook, `Expected component hook ${index}`)
     ),
   };
+  return details;
 }
 
 function parseComponentType(value: mixed): string {
@@ -679,9 +694,13 @@ function parseOwnersStack(value: mixed): OwnersStackResult {
   };
 }
 
-function parseOwnersBranch(value: mixed): Array<Owner> {
-  return expectArray(value, 'Expected owners branch array').map(
-    (owner, index) => parseNamedObject(owner, `Expected owner ${index}`)
+function parseComponentBranch(
+  value: mixed,
+  label: string
+): Array<ComponentBranchEntry> {
+  return expectArray(value, `Expected ${label} branch array`).map(
+    (entry, index) =>
+      parseComponentBranchEntry(entry, `Expected ${label} ${index}`)
   );
 }
 
@@ -893,6 +912,31 @@ async function runE2E(chrome: Chrome, appUrl: string): Promise<void> {
     node => node.name === 'Todo' && node.type === 'function',
     'Expected function component Todo'
   );
+  const todoList = findNode(
+    tree,
+    node => node.name === 'TodoList' && node.type === 'function',
+    'Expected function component TodoList'
+  );
+  const todoListHost = findNode(
+    tree,
+    node => node.name === 'ul' && node.type === 'host',
+    'Expected host ul for TodoList'
+  );
+  const mainNode = findNode(
+    tree,
+    node => node.name === 'main' && node.type === 'host',
+    'Expected host main'
+  );
+  const app = findNode(
+    tree,
+    node => node.name === 'App' && node.type === 'function',
+    'Expected function component App'
+  );
+  const root = findNode(
+    tree,
+    node => node.type === 'root',
+    'Expected root node'
+  );
   const memoBox = findNode(
     tree,
     node => node.name.includes('MemoBox') && node.type === 'memo',
@@ -972,7 +1016,7 @@ async function runE2E(chrome: Chrome, appUrl: string): Promise<void> {
   assert.strictEqual(domLookup.type, 'host');
   assert.strictEqual(domLookup.name, 'button');
 
-  log('Checking source, owners, and error payloads...');
+  log('Checking source, parents, owners, and error payloads...');
   const source = parseSourceResult(
     await callTool('react_get_component_source', {
       uid: counter.uid,
@@ -991,10 +1035,45 @@ async function runE2E(chrome: Chrome, appUrl: string): Promise<void> {
     );
   }
 
-  const ownersBranch = parseOwnersBranch(
+  const parentsBranch = parseComponentBranch(
+    await callTool('react_get_parents_branch', {
+      uid: todo.uid,
+    }),
+    'parents'
+  );
+  assert.deepStrictEqual(parentsBranch, [
+    {
+      uid: todoListHost.uid,
+      name: todoListHost.name,
+      type: todoListHost.type,
+    },
+    {
+      uid: todoList.uid,
+      name: todoList.name,
+      type: todoList.type,
+    },
+    {
+      uid: mainNode.uid,
+      name: mainNode.name,
+      type: mainNode.type,
+    },
+    {
+      uid: app.uid,
+      name: app.name,
+      type: app.type,
+    },
+    {
+      uid: root.uid,
+      name: root.name,
+      type: root.type,
+    },
+  ]);
+
+  const ownersBranch = parseComponentBranch(
     await callTool('react_get_owners_branch', {
       uid: todo.uid,
-    })
+    }),
+    'owners'
   );
   assert(
     ownersBranch.some(owner => owner.name === 'TodoList'),
